@@ -4,76 +4,65 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, 'Please add a name'],
-    trim: true,
-    maxlength: [50, 'Name cannot be more than 50 characters']
+    required: true,
+    trim: true
   },
   phone: {
     type: String,
-    required: [true, 'Please add a phone number'],
+    required: true,
     unique: true,
-    match: [/^\+251[0-9]{9}$/, 'Please add a valid Ethiopian phone number']
+    trim: true
   },
   password: {
     type: String,
-    required: [true, 'Please add a password'],
-    minlength: 6,
-    select: false
+    required: true,
+    minlength: 6
   },
   role: {
     type: String,
-    enum: ['client', 'massager', 'admin'],
+    enum: ['client', 'massager'],
     default: 'client'
   },
-  // For massagers
-  services: [{
-    type: String
-  }],
+  // Massager-specific fields
+  services: {
+    type: [String],
+    default: []
+  },
   gender: {
     type: String,
     enum: ['male', 'female', 'other']
   },
-  location: {
-    type: String
-  },
-  availability: {
-    type: String
-  },
-  profileImage: {
-    type: String,
-    default: 'default-profile.jpg'
-  },
-  isVerified: {
-    type: Boolean,
-    default: false
-  },
+  location: String,
+  availability: String,
+  hourlyRate: Number,
   rating: {
-    type: Number,
-    default: 0
+    average: {
+      type: Number,
+      default: 0
+    },
+    count: {
+      type: Number,
+      default: 0
+    }
   },
-  totalRatings: {
-    type: Number,
-    default: 0
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  isAvailable: {
+    type: Boolean,
+    default: true
   }
+}, {
+  timestamps: true
 });
 
-// Encrypt password using bcrypt
+// Hash password before saving
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    next();
-  }
-
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
 });
 
-// Match user entered password to hashed password in database
-userSchema.methods.matchPassword = async function(enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
 module.exports = mongoose.model('User', userSchema);
