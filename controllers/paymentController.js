@@ -1,204 +1,142 @@
+const Payment = require('../models/Payment');
 const Booking = require('../models/Booking');
-const telebirrIntegration = require('../utils/telebirrIntegration');
+const telebirr = require('../utils/telebirr');
 
-// @desc    Initialize payment for booking
-// @route   POST /api/payments/initialize
-// @access  Private
-exports.initializePayment = async (req, res) => {
+// Initiate Telebirr payment
+const initiatePayment = async (req, res) => {
   try {
-    const { bookingId, phone } = req.body;
+    const { bookingId, phoneNumber } = req.body;
 
-    if (!bookingId || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide booking ID and phone number'
-      });
-    }
-
-    // Get booking details
-    const booking = await Booking.findById(bookingId);
+    // Find booking
+    const booking = await Booking.findById(bookingId)
+      .populate('client', 'name phone')
+      .populate('massager', 'name');
 
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
+      return res.status(404).json({ message: 'Booking not found' });
     }
 
     // Check if user owns this booking
-    if (booking.user.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to pay for this booking'
-      });
+    if (booking.client._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     // Check if booking is already paid
     if (booking.paymentStatus === 'paid') {
-      return res.status(400).json({
-        success: false,
-        message: 'Booking is already paid'
-      });
+      return res.status(400).json({ message: 'Booking is already paid' });
     }
 
     // Generate transaction ID
-    const transactionId = `DIMPLE_${bookingId}_${Date.now()}`;
+    const transactionId = `DIMPLE_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Initialize payment with Telebirr
-    const paymentData = await telebirrIntegration.initializePayment(
+    // Initiate payment with Telebirr
+    const paymentResult = await telebirr.initiatePayment(
       booking.totalAmount,
-      phone,
+      phoneNumber,
       transactionId,
-      `Payment for booking ${bookingId}`
+      `Payment for massage session with ${booking.massager.name}`
     );
 
-    // Update booking with transaction ID
-    booking.transactionId = transactionId;
-    await booking.save();
-
-    res.status(200).json({
-      success: true,
-      data: paymentData
+    // Create payment record
+    const payment = await Payment.create({
+      booking: bookingId,
+      client: req.user._id,
+      amount: booking.totalAmount,
+      transactionId,
+      telebirrResponse: paymentResult
     });
-  } catch (error) {
-    console.error('Initialize payment error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Payment initialization failed'
-    });
-  }
-};
-
-// @desc    Verify payment
-// @route   POST /api/payments/verify
-// @access  Private
-exports.verifyPayment = async (req, res) => {
-  try {
-    const { transactionId } = req.body;
-
-    if (!transactionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide transaction ID'
-      });
-    }
-
-    // Verify payment with Telebirr
-    const verificationResult = await telebirrIntegration.verifyPayment(transactionId);
-
-    // Find booking by transaction ID
-    const booking = await Booking.findOne({ transactionId });
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found for this transaction'
-      });
-    }
-
-    // Check if user owns this booking
-    if (booking.user.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to verify this payment'
-      });
-    }
 
     // Update booking payment status
-    if (verificationResult.status === 'success') {
+    booking.paymentStatus = 'pending';
+    await booking.save();
+
+    res.json({
+      paymentId: payment._id,
+      transactionId,
+      paymentResult
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Check payment status
+const checkPaymentStatus = async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+
+    // Find payment
+    const payment = await Payment.findOne({ transactionId })
+      .populate('booking')
+      .populate('client');
+
+    if (!payment) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    // Check if user owns this payment
+    if (payment.client._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Check payment status with Telebirr
+    const statusResult = await telebirr.checkPaymentStatus(transactionId);
+
+    // Update payment status
+    payment.status = statusResult.status;
+    payment.telebirrResponse = { ...payment.telebirrResponse, statusCheck: statusResult };
+    await payment.save();
+
+    // Update booking payment status if payment is successful
+    if (statusResult.status === 'success') {
+      const booking = await Booking.findById(payment.booking._id);
       booking.paymentStatus = 'paid';
-      booking.status = 'confirmed'; // Change booking status to confirmed
       await booking.save();
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        verificationResult,
-        booking
-      }
+    res.json({
+      paymentStatus: payment.status,
+      bookingStatus: payment.booking.status,
+      statusResult
     });
   } catch (error) {
-    console.error('Verify payment error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Payment verification failed'
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Telebirr payment webhook
-// @route   POST /api/payments/webhook/telebirr
-// @access  Public (called by Telebirr)
-exports.telebirrWebhook = async (req, res) => {
+// Payment callback (for Telebirr webhook)
+const paymentCallback = async (req, res) => {
   try {
-    const signature = req.headers['x-telebirr-signature'];
-    const payload = req.body;
+    const { transactionId, status } = req.body;
 
-    // Process webhook
-    const webhookData = telebirrIntegration.processWebhook(payload, signature);
+    // Find payment
+    const payment = await Payment.findOne({ transactionId })
+      .populate('booking');
 
-    // Find booking by transaction ID
-    const booking = await Booking.findOne({ transactionId: webhookData.transactionId });
+    if (!payment) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
 
-    if (booking) {
-      // Update booking payment status based on webhook data
-      if (webhookData.status === 'success') {
-        booking.paymentStatus = 'paid';
-        booking.status = 'confirmed';
-      } else if (webhookData.status === 'failed') {
-        booking.paymentStatus = 'failed';
-      }
+    // Update payment status
+    payment.status = status;
+    payment.telebirrResponse = { ...payment.telebirrResponse, callback: req.body };
+    await payment.save();
 
+    // Update booking payment status if payment is successful
+    if (status === 'success') {
+      const booking = await Booking.findById(payment.booking._id);
+      booking.paymentStatus = 'paid';
       await booking.save();
     }
 
-    res.status(200).json({ success: true });
+    res.json({ message: 'Callback processed successfully' });
   } catch (error) {
-    console.error('Telebirr webhook error:', error);
-    res.status(400).json({ success: false, message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get payment history for user
-// @route   GET /api/payments/history
-// @access  Private
-exports.getPaymentHistory = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
-    const startIndex = (page - 1) * limit;
-
-    // Find user's bookings with payments
-    const bookings = await Booking.find({ 
-      user: req.user.id,
-      paymentStatus: { $in: ['paid', 'failed', 'refunded'] }
-    })
-    .select('date service totalAmount paymentStatus paymentMethod transactionId')
-    .sort({ date: -1 })
-    .skip(startIndex)
-    .limit(limit)
-    .populate('massager', 'name');
-
-    const total = await Booking.countDocuments({ 
-      user: req.user.id,
-      paymentStatus: { $in: ['paid', 'failed', 'refunded'] }
-    });
-
-    res.status(200).json({
-      success: true,
-      count: bookings.length,
-      pagination: {
-        page,
-        pages: Math.ceil(total / limit)
-      },
-      data: bookings
-    });
-  } catch (error) {
-    console.error('Get payment history error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error'
-    });
-  }
+module.exports = {
+  initiatePayment,
+  checkPaymentStatus,
+  paymentCallback
 };
