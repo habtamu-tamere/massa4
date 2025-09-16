@@ -1,30 +1,21 @@
 const User = require('../models/User');
 const generateToken = require('../utils/generateToken');
-const { registerValidation, loginValidation } = require('../middleware/validation');
+const { validatePhone } = require('../middleware/validation');
 
-// @desc    Register user
-// @route   POST /api/auth/register
-// @access  Public
-exports.register = async (req, res) => {
+// Register user
+const register = async (req, res) => {
   try {
-    // Validate request body
-    const { error } = registerValidation(req.body);
-    if (error) {
-      return res.status(400).json({
-        success: false,
-        message: error.details[0].message
-      });
+    const { name, phone, password, role, services, gender, location, availability, hourlyRate } = req.body;
+
+    // Validate phone number
+    if (!validatePhone(phone)) {
+      return res.status(400).json({ message: 'Please provide a valid Ethiopian phone number' });
     }
 
-    const { name, phone, password, role, services, gender, location, availability } = req.body;
-
-    // Check if user exists
+    // Check if user already exists
     const userExists = await User.findOne({ phone });
     if (userExists) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists with this phone number'
-      });
+      return res.status(400).json({ message: 'User already exists with this phone number' });
     }
 
     // Create user
@@ -32,169 +23,75 @@ exports.register = async (req, res) => {
       name,
       phone,
       password,
-      role: role || 'client',
-      services,
-      gender,
-      location,
-      availability
+      role,
+      services: role === 'massager' ? services : undefined,
+      gender: role === 'massager' ? gender : undefined,
+      location: role === 'massager' ? location : undefined,
+      availability: role === 'massager' ? availability : undefined,
+      hourlyRate: role === 'massager' ? hourlyRate : undefined
     });
 
     if (user) {
       res.status(201).json({
-        success: true,
-        data: {
-          _id: user._id,
-          name: user.name,
-          phone: user.phone,
-          role: user.role,
-          token: generateToken(user._id)
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error'
-    });
-  }
-};
-
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
-exports.login = async (req, res) => {
-  try {
-    // Validate request body
-    const { error } = loginValidation(req.body);
-    if (error) {
-      return res.status(400).json({
-        success: false,
-        message: error.details[0].message
-      });
-    }
-
-    const { phone, password } = req.body;
-
-    // Check for user
-    const user = await User.findOne({ phone }).select('+password');
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Check if password matches
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: {
         _id: user._id,
         name: user.name,
         phone: user.phone,
         role: user.role,
         token: generateToken(user._id)
-      }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error'
-    });
-  }
-};
-
-// @desc    Get current logged in user
-// @route   GET /api/auth/me
-// @access  Private
-exports.getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error'
-    });
-  }
-};
-
-// @desc    Update user details
-// @route   PUT /api/auth/updatedetails
-// @access  Private
-exports.updateDetails = async (req, res) => {
-  try {
-    const fieldsToUpdate = {
-      name: req.body.name,
-      location: req.body.location,
-      availability: req.body.availability
-    };
-
-    // Add massager-specific fields if user is a massager
-    if (req.user.role === 'massager') {
-      fieldsToUpdate.services = req.body.services;
-      fieldsToUpdate.gender = req.body.gender;
-    }
-
-    const user = await User.findByIdAndUpdate(req.user.id, fieldsToUpdate, {
-      new: true,
-      runValidators: true
-    });
-
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    console.error('Update user error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error'
-    });
-  }
-};
-
-// @desc    Update password
-// @route   PUT /api/auth/updatepassword
-// @access  Private
-exports.updatePassword = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('+password');
-
-    // Check current password
-    if (!(await user.matchPassword(req.body.currentPassword))) {
-      return res.status(401).json({
-        success: false,
-        message: 'Password is incorrect'
       });
+    } else {
+      res.status(400).json({ message: 'Invalid user data' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
-    user.password = req.body.newPassword;
-    await user.save();
+// Login user
+const login = async (req, res) => {
+  try {
+    const { phone, password } = req.body;
 
-    res.status(200).json({
-      success: true,
-      message: 'Password updated successfully'
+    const user = await User.findOne({ phone });
+
+    if (user && (await user.comparePassword(password))) {
+      res.json({
+        _id: user._id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+        token: generateToken(user._id)
+      });
+    } else {
+      res.status(401).json({ message: 'Invalid phone or password' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get current user profile
+const getMe = async (req, res) => {
+  try {
+    res.json({
+      _id: req.user._id,
+      name: req.user.name,
+      phone: req.user.phone,
+      role: req.user.role,
+      services: req.user.services,
+      gender: req.user.gender,
+      location: req.user.location,
+      availability: req.user.availability,
+      hourlyRate: req.user.hourlyRate,
+      rating: req.user.rating
     });
   } catch (error) {
-    console.error('Update password error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error'
-    });
+    res.status(500).json({ message: error.message });
   }
+};
+
+module.exports = {
+  register,
+  login,
+  getMe
 };
