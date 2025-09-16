@@ -1,18 +1,14 @@
 const mongoose = require('mongoose');
 
 const bookingSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.ObjectId,
+  client: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
   massager: {
-    type: mongoose.Schema.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
-  },
-  service: {
-    type: String,
     required: true
   },
   date: {
@@ -23,60 +19,31 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  endTime: {
-    type: String,
-    required: true
-  },
   duration: {
-    type: Number, // in minutes
-    required: true
+    type: Number, // in hours
+    required: true,
+    default: 1
   },
   location: {
     type: String,
     required: true
   },
+  status: {
+    type: String,
+    enum: ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled'],
+    default: 'pending'
+  },
   totalAmount: {
     type: Number,
     required: true
   },
-  status: {
-    type: String,
-    enum: ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled', 'rejected'],
-    default: 'pending'
-  },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'refunded', 'failed'],
+    enum: ['pending', 'paid', 'failed', 'refunded'],
     default: 'pending'
-  },
-  paymentMethod: {
-    type: String,
-    default: 'telebirr'
-  },
-  transactionId: {
-    type: String
-  },
-  cancellationReason: {
-    type: String
-  },
-  specialRequests: {
-    type: String,
-    maxlength: [300, 'Special requests cannot be more than 300 characters']
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
-});
-
-// Update the updatedAt field before saving
-bookingSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
+}, {
+  timestamps: true
 });
 
 module.exports = mongoose.model('Booking', bookingSchema);
