@@ -1,21 +1,11 @@
 const express = require('express');
-const {
-  initializePayment,
-  verifyPayment,
-  telebirrWebhook,
-  getPaymentHistory
-} = require('../controllers/paymentController');
-const { protect } = require('../middleware/auth');
+const { initiatePayment, checkPaymentStatus, paymentCallback } = require('../controllers/paymentController');
+const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(protect);
-
-router.post('/initialize', initializePayment);
-router.post('/verify', verifyPayment);
-router.get('/history', getPaymentHistory);
-
-// Webhook (no authentication needed)
-router.post('/webhook/telebirr', telebirrWebhook);
+router.post('/telebirr/initiate', auth, initiatePayment);
+router.get('/telebirr/status/:transactionId', auth, checkPaymentStatus);
+router.post('/telebirr/callback', paymentCallback);
 
 module.exports = router;
