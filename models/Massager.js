@@ -6,22 +6,36 @@ const massagerSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  services: {
+  specialty: {
     type: [String],
     required: true
   },
-  specialties: [String],
-  experience: Number, // in years
-  certification: String,
-  about: String,
-  images: [String],
-  isFeatured: {
-    type: Boolean,
-    default: false
+  experience: {
+    type: Number,
+    default: 0
   },
-  isVerified: {
+  pricePerHour: {
+    type: Number,
+    required: true
+  },
+  isAvailable: {
     type: Boolean,
-    default: false
+    default: true
+  },
+  workingHours: {
+    start: {
+      type: String,
+      required: true
+    },
+    end: {
+      type: String,
+      required: true
+    }
+  },
+  workingDays: {
+    type: [String],
+    enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    required: true
   }
 }, {
   timestamps: true
