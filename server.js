@@ -27,6 +27,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/massagers', require('./routes/massagers'));
 app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/ratings', require('./routes/ratings'));
+app.use('/api/admin', require('./routes/admin'));
 
 // Serve the main page for all other requests
 app.get('*', (req, res) => {
@@ -38,3 +39,4 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
