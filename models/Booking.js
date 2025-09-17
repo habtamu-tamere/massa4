@@ -15,33 +15,34 @@ const bookingSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
-  startTime: {
+  time: {
     type: String,
     required: true
   },
   duration: {
-    type: Number, // in hours
-    required: true,
+    type: Number,
     default: 1
   },
-  location: {
-    type: String,
+  totalPrice: {
+    type: Number,
     required: true
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled'],
+    enum: ['pending', 'confirmed', 'completed', 'cancelled'],
     default: 'pending'
   },
-  totalAmount: {
-    type: Number,
-    required: true
+  paymentMethod: {
+    type: String,
+    default: 'telebirr'
   },
   paymentStatus: {
     type: String,
     enum: ['pending', 'paid', 'failed', 'refunded'],
     default: 'pending'
-  }
+  },
+  paymentId: String,
+  telebirrPhone: String
 }, {
   timestamps: true
 });
