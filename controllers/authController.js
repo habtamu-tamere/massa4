@@ -22,6 +22,14 @@ exports.register = async (req, res) => {
       });
     }
     
+    // Validate pricePerHour for massagers
+    if (role === 'massager' && (!pricePerHour || pricePerHour < 500)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Price per hour must be at least 500 ETB for massagers'
+      });
+    }
+    
     // Create user
     const user = await User.create({
       name,
@@ -125,5 +133,6 @@ exports.getMe = async (req, res) => {
     });
   }
 };
+
 
 
