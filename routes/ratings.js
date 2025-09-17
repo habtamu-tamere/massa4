@@ -1,14 +1,12 @@
 const express = require('express');
-const {
-  getMassagerRatings,
-  createRating
-} = require('../controllers/ratingController');
-
+const { createRating, getMassagerRatings } = require('../controllers/ratingController');
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/massager/:id', getMassagerRatings);
-router.post('/', protect, createRating);
+router.use(protect);
+
+router.post('/', createRating);
+router.get('/massager/:massagerId', getMassagerRatings);
 
 module.exports = router;
