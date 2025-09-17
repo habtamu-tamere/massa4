@@ -54,6 +54,13 @@ const userSchema = new mongoose.Schema({
       return this.role === 'massager';
     }
   },
+  pricePerHour: {
+    type: Number,
+    required: function() {
+      return this.role === 'massager';
+    },
+    min: 100
+  },
   rating: {
     type: Number,
     default: 0,
@@ -81,3 +88,4 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 module.exports = mongoose.model('User', userSchema);
+
