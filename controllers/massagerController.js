@@ -1,171 +1,98 @@
 const User = require('../models/User');
-const Booking = require('../models/Booking');
 
-// @desc    Get all massagers
-// @route   GET /api/massagers
-// @access  Public
-exports.getMassagers = async (req, res, next) => {
+// Get all massagers
+exports.getMassagers = async (req, res) => {
   try {
-    // Filtering, sorting, pagination
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const total = await User.countDocuments({ role: 'massager', isActive: true });
-
-    // Build query
-    let query = User.find({ role: 'massager', isActive: true });
-
-    // Select fields
-    query = query.select('name phone services gender location availability rating hourlyRate');
-
-    // Pagination
-    query = query.skip(startIndex).limit(limit);
-
-    // Execute query
-    const massagers = await query;
-
-    // Pagination result
-    const pagination = {};
-
-    if (endIndex < total) {
-      pagination.next = {
-        page: page + 1,
-        limit
-      };
-    }
-
-    if (startIndex > 0) {
-      pagination.prev = {
-        page: page - 1,
-        limit
-      };
-    }
-
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    // Find users with role 'massager'
+    const massagers = await User.find({ role: 'massager' })
+      .skip(skip)
+      .limit(limit);
+    
+    // Get total count for pagination
+    const total = await User.countDocuments({ role: 'massager' });
+    
     res.status(200).json({
       success: true,
       count: massagers.length,
-      pagination,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
       data: massagers
     });
   } catch (error) {
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
-// @desc    Get single massager
-// @route   GET /api/massagers/:id
-// @access  Public
-exports.getMassager = async (req, res, next) => {
+// Get single massager
+exports.getMassager = async (req, res) => {
   try {
     const massager = await User.findOne({
       _id: req.params.id,
-      role: 'massager',
-      isActive: true
-    }).select('name phone services gender location availability rating hourlyRate');
-
+      role: 'massager'
+    });
+    
     if (!massager) {
       return res.status(404).json({
         success: false,
         message: 'Massager not found'
       });
     }
-
+    
     res.status(200).json({
       success: true,
       data: massager
     });
   } catch (error) {
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
-// @desc    Get massager availability
-// @route   GET /api/massagers/:id/availability
-// @access  Public
-exports.getMassagerAvailability = async (req, res, next) => {
+// Search massagers by specialty or location
+exports.searchMassagers = async (req, res) => {
   try {
-    const { date } = req.query;
-    const massagerId = req.params.id;
-
-    // Check if massager exists and is active
-    const massager = await User.findOne({
-      _id: massagerId,
-      role: 'massager',
-      isActive: true
-    });
-
-    if (!massager) {
-      return res.status(404).json({
-        success: false,
-        message: 'Massager not found'
-      });
+    const { specialty, location, page = 1, limit = 10 } = req.query;
+    
+    let query = { role: 'massager' };
+    
+    if (specialty) {
+      query.services = { $in: [new RegExp(specialty, 'i')] };
     }
-
-    // Get bookings for the massager on the specified date
-    const bookings = await Booking.find({
-      massager: massagerId,
-      date: new Date(date),
-      status: { $in: ['confirmed', 'in-progress'] }
-    });
-
-    // Parse availability from massager's schedule
-    // This is a simplified implementation
-    const availableSlots = [
-      '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'
-    ];
-
-    // Filter out booked slots
-    const bookedSlots = bookings.map(booking => booking.startTime);
-    const freeSlots = availableSlots.filter(slot => !bookedSlots.includes(slot));
-
-    res.status(200).json({
-      success: true,
-      data: {
-        date,
-        availableSlots: freeSlots
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Search massagers
-// @route   GET /api/massagers/search
-// @access  Public
-exports.searchMassagers = async (req, res, next) => {
-  try {
-    const { location, service, minRating, maxPrice } = req.query;
-
-    // Build query
-    let query = { role: 'massager', isActive: true };
-
+    
     if (location) {
       query.location = new RegExp(location, 'i');
     }
-
-    if (service) {
-      query.services = new RegExp(service, 'i');
-    }
-
-    if (minRating) {
-      query['rating.average'] = { $gte: parseFloat(minRating) };
-    }
-
-    if (maxPrice) {
-      query.hourlyRate = { $lte: parseFloat(maxPrice) };
-    }
-
+    
+    const skip = (page - 1) * limit;
+    
     const massagers = await User.find(query)
-      .select('name phone services gender location availability rating hourlyRate');
-
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    const total = await User.countDocuments(query);
+    
     res.status(200).json({
       success: true,
       count: massagers.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
       data: massagers
     });
   } catch (error) {
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
