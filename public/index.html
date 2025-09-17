@@ -900,55 +900,74 @@
             });
         }
 
-        // Render pagination controls
-        function renderPagination() {
-            const totalPages = Math.ceil(massagers.length / itemsPerPage);
-            paginationElement.innerHTML = '';
-            
-            if (totalPages <= 1) return;
-            
-            // Previous button
-            if (currentPage > 1) {
-                const prevBtn = document.createElement('button');
-                prevBtn.textContent = 'Previous';
-                prevBtn.addEventListener('click', () => {
-                    currentPage--;
-                    renderMassagers();
-                    renderPagination();
-                    window.scrollTo(0, 0);
-                });
-                paginationElement.appendChild(prevBtn);
-            }
-            
-            // Page numbers
-            for (let i = 1; i <= totalPages; i++) {
-                const pageBtn = document.createElement('button');
-                pageBtn.textContent = i;
-                if (i === currentPage) {
-                    pageBtn.classList.add('active');
-                }
-                pageBtn.addEventListener('click', () => {
-                    currentPage = i;
-                    renderMassagers();
-                    renderPagination();
-                    window.scrollTo(0, 0);
-                });
-                paginationElement.appendChild(pageBtn);
-            }
-            
-            // Next button
-            if (currentPage < totalPages) {
-                const nextBtn = document.createElement('button');
-                nextBtn.textContent = 'Next';
-                nextBtn.addEventListener('click', () => {
-                    currentPage++;
-                    renderMassagers();
-                    renderPagination();
-                    window.scrollTo(0, 0);
-                });
-                paginationElement.appendChild(nextBtn);
-            }
-        }
+// Replace static massagers data with API call
+async function fetchMassagers(page = 1, limit = 10) {
+  try {
+    const token = localStorage.getItem('dimple_token');
+    const response = await fetch(`/api/massagers?page=${page}&limit=${limit}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      return data;
+    } else {
+      console.error('Failed to fetch massagers:', data.message);
+      return { data: [], total: 0, pages: 1 };
+    }
+  } catch (error) {
+    console.error('Error fetching massagers:', error);
+    return { data: [], total: 0, pages: 1 };
+  }
+}
+
+// Update renderMassagers function to use API data
+async function renderMassagers() {
+  massagersContainer.innerHTML = '';
+  
+  const massagersData = await fetchMassagers(currentPage, itemsPerPage);
+  
+  if (massagersData.data.length === 0) {
+    massagersContainer.innerHTML = '<p>No massagers available</p>';
+    return;
+  }
+  
+  massagersData.data.forEach(massager => {
+    const card = document.createElement('div');
+    card.className = 'massager-card';
+    card.innerHTML = `
+      <div class="massager-image">${massager.gender === 'male' ? '💆‍♂️' : '💆‍♀️'}</div>
+      <div class="massager-info">
+        <h3 class="massager-name">${massager.name}</h3>
+        <div class="massager-specialty">Specialty: ${massager.services.join(', ')}</div>
+        <div class="massager-rating">Rating: ${massager.rating} ⭐ (${massager.totalRatings} reviews)</div>
+        <div class="massager-location">Location: ${massager.location}</div>
+        <div class="massager-availability">Available: ${massager.availability}</div>
+        <div class="massager-price">Price: ${massager.pricePerHour} ETB/hr</div>
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-outline view-profile-btn" data-id="${massager._id}">View Profile</button>
+        <button class="btn btn-primary book-btn" data-id="${massager._id}">Book Now</button>
+      </div>
+    `;
+    massagersContainer.appendChild(card);
+  });
+  
+  // Update pagination
+  renderPagination(massagersData.total, massagersData.pages);
+  
+  // Add event listeners to the buttons
+  document.querySelectorAll('.book-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const massagerId = this.getAttribute('data-id');
+      openBookingModal(massagerId);
+    });
+  });
+}
+        
 
         // Open booking modal
         function openBookingModal(massagerId) {
@@ -1375,3 +1394,4 @@
     </script>
 </body>
 </html>
+
