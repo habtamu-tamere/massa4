@@ -11,7 +11,7 @@ const generateToken = (id) => {
 // Register user
 exports.register = async (req, res) => {
   try {
-    const { name, phone, password, role, services, gender, location, availability } = req.body;
+    const { name, phone, password, role, services, gender, location, availability, pricePerHour } = req.body;
     
     // Check if user already exists
     const existingUser = await User.findOne({ phone });
@@ -31,7 +31,8 @@ exports.register = async (req, res) => {
       services,
       gender,
       location,
-      availability
+      availability,
+      pricePerHour
     });
     
     // Generate token
@@ -123,3 +124,4 @@ exports.getMe = async (req, res) => {
     });
   }
 };
+
