@@ -1,21 +1,27 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const validator = require('validator');
 
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
-    trim: true
+    required: [true, 'Please provide a name'],
+    maxlength: 50
   },
   phone: {
     type: String,
-    required: true,
+    required: [true, 'Please provide a phone number'],
     unique: true,
-    trim: true
+    validate: {
+      validator: function(v) {
+        return /^\+251\d{9}$/.test(v);
+      },
+      message: 'Phone number must be a valid Ethiopian number (+251...)'
+    }
   },
   password: {
     type: String,
-    required: true,
+    required: [true, 'Please provide a password'],
     minlength: 6
   },
   role: {
@@ -23,31 +29,40 @@ const userSchema = new mongoose.Schema({
     enum: ['client', 'massager'],
     default: 'client'
   },
-  // Massager-specific fields
   services: {
     type: [String],
-    default: []
+    required: function() {
+      return this.role === 'massager';
+    }
   },
   gender: {
     type: String,
-    enum: ['male', 'female', 'other']
-  },
-  location: String,
-  availability: String,
-  hourlyRate: Number,
-  rating: {
-    average: {
-      type: Number,
-      default: 0
-    },
-    count: {
-      type: Number,
-      default: 0
+    enum: ['male', 'female', 'other'],
+    required: function() {
+      return this.role === 'massager';
     }
   },
-  isAvailable: {
-    type: Boolean,
-    default: true
+  location: {
+    type: String,
+    required: function() {
+      return this.role === 'massager';
+    }
+  },
+  availability: {
+    type: String,
+    required: function() {
+      return this.role === 'massager';
+    }
+  },
+  rating: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 5
+  },
+  totalRatings: {
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true
