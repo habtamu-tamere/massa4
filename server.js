@@ -1,11 +1,7 @@
 const express = require('express');
-const path = require('path');
-const dotenv = require('dotenv');
 const cors = require('cors');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const dotenv = require('dotenv');
 const connectDB = require('./config/database');
-const errorHandler = require('./middleware/errorHandler');
 
 // Load env vars
 dotenv.config();
@@ -13,69 +9,39 @@ dotenv.config();
 // Connect to database
 connectDB();
 
-// Route files
-const auth = require('./routes/auth');
-const bookings = require('./routes/bookings');
-const massagers = require('./routes/massagers');
-const payments = require('./routes/payments');
-const ratings = require('./routes/ratings');
-
 const app = express();
 
-// Body parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Body parser middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // Enable CORS
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://massa4.onrender.com',
-  credentials: true
-}));
+app.use(cors());
 
-// Set security headers
-app.use(helmet());
+// Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/massagers', require('./routes/massagers'));
+app.use('/api/bookings', require('./routes/bookings'));
+app.use('/api/ratings', require('./routes/ratings'));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
-
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Mount routers
-app.use('/api/auth', auth);
-app.use('/api/bookings', bookings);
-app.use('/api/massagers', massagers);
-app.use('/api/payments', payments);
-app.use('/api/ratings', ratings);
-
-// Serve the frontend for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Basic route for testing
+app.get('/', (req, res) => {
+  res.json({ message: 'Dimple Massager Booking API' });
 });
 
-// Error handler middleware
-app.use(errorHandler);
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err, promise) => {
-  console.log(`Error: ${err.message}`);
-  // Close server & exit process
-  server.close(() => {
-    process.exit(1);
+// Handle undefined routes
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
   });
 });
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
-
-module.exports = app;
 
 
 
@@ -164,5 +130,6 @@ module.exports = app;
 // });
 
 // module.exports = app;
+
 
 
