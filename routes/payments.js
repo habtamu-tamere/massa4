@@ -1,11 +1,16 @@
 const express = require('express');
-const { initiatePayment, checkPaymentStatus, paymentCallback } = require('../controllers/paymentController');
-const auth = require('../middleware/auth');
+const {
+  initiateTelebirrPayment,
+  verifyTelebirrPayment,
+  getPayment
+} = require('../controllers/paymentController');
+
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.post('/telebirr/initiate', auth, initiatePayment);
-router.get('/telebirr/status/:transactionId', auth, checkPaymentStatus);
-router.post('/telebirr/callback', paymentCallback);
+router.post('/telebirr/initiate', protect, initiateTelebirrPayment);
+router.post('/telebirr/verify', verifyTelebirrPayment);
+router.get('/:id', protect, getPayment);
 
 module.exports = router;
