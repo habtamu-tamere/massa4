@@ -45,7 +45,8 @@ exports.register = async (req, res) => {
         id: user._id,
         name: user.name,
         phone: user.phone,
-        role: user.role
+        role: user.role,
+        pricePerHour: user.pricePerHour
       }
     });
   } catch (error) {
@@ -124,4 +125,5 @@ exports.getMe = async (req, res) => {
     });
   }
 };
+
 
