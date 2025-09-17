@@ -1,28 +1,29 @@
 const validatePhone = (phone) => {
-  const ethiopianPhoneRegex = /^(\+251|0)(9|7)[0-9]{8}$/;
-  return ethiopianPhoneRegex.test(phone);
+  const regex = /^\+251\d{9}$/;
+  return regex.test(phone);
 };
 
 const validateBooking = (req, res, next) => {
-  const { date, startTime, duration } = req.body;
+  const { date, time } = req.body;
   
-  if (!date || !startTime) {
-    return res.status(400).json({ message: 'Date and time are required' });
+  if (!date || !time) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide date and time for booking'
+    });
   }
   
   const bookingDate = new Date(date);
-  if (bookingDate < new Date()) {
-    return res.status(400).json({ message: 'Cannot book for past dates' });
-  }
+  const now = new Date();
   
-  if (duration && (duration < 0.5 || duration > 8)) {
-    return res.status(400).json({ message: 'Duration must be between 0.5 and 8 hours' });
+  if (bookingDate < now) {
+    return res.status(400).json({
+      success: false,
+      message: 'Booking date cannot be in the past'
+    });
   }
   
   next();
 };
 
-module.exports = {
-  validatePhone,
-  validateBooking
-};
+module.exports = { validatePhone, validateBooking };
