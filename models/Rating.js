@@ -22,25 +22,36 @@ const ratingSchema = new mongoose.Schema({
     min: 1,
     max: 5
   },
-  review: String
+  review: {
+    type: String,
+    maxlength: 500
+  }
 }, {
   timestamps: true
 });
 
 // Update massager's average rating when a new rating is added
 ratingSchema.post('save', async function() {
-  const Rating = this.constructor;
-  const massagerId = this.massager;
+  const Rating = this.model('Rating');
+  const User = this.model('User');
   
-  const result = await Rating.aggregate([
-    { $match: { massager: massagerId } },
-    { $group: { _id: '$massager', averageRating: { $avg: '$rating' }, count: { $sum: 1 } } }
+  const stats = await Rating.aggregate([
+    {
+      $match: { massager: this.massager }
+    },
+    {
+      $group: {
+        _id: '$massager',
+        nRating: { $sum: 1 },
+        avgRating: { $avg: '$rating' }
+      }
+    }
   ]);
   
-  if (result.length > 0) {
-    await mongoose.model('User').findByIdAndUpdate(massagerId, {
-      'rating.average': result[0].averageRating,
-      'rating.count': result[0].count
+  if (stats.length > 0) {
+    await User.findByIdAndUpdate(this.massager, {
+      rating: stats[0].avgRating,
+      totalRatings: stats[0].nRating
     });
   }
 });
