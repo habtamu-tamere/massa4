@@ -1,5 +1,5 @@
         // API Base URL - Change this to your backend URL
-        const API_BASE_URL = 'http://localhost:5000/api';
+        const API_BASE_URL = 'https://massa4.onrender.com/api';
 
         // Current state
         let currentPage = 1;
@@ -716,4 +716,5 @@
         }
 
         // Initialize the app
+
         init();
