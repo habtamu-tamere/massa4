@@ -394,6 +394,7 @@ async function handleRegister(e) {
         userData.gender = document.getElementById('register-gender').value;
         userData.location = document.getElementById('register-location').value;
         userData.availability = document.getElementById('register-availability').value;
+        userData.pricePerHour = parseInt(document.getElementById('register-price').value);
     }
     
     try {
@@ -620,3 +621,4 @@ if ('serviceWorker' in navigator) {
 
 // Initialize the app
 init();
+
