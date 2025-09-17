@@ -1,111 +1,77 @@
 const Payment = require('../models/Payment');
 const Booking = require('../models/Booking');
-const telebirr = require('../utils/telebirr');
+const User = require('../models/User');
 
-// Initiate Telebirr payment
-const initiatePayment = async (req, res) => {
+// @desc    Initialize Telebirr payment
+// @route   POST /api/payments/telebirr/initiate
+// @access  Private
+exports.initiateTelebirrPayment = async (req, res, next) => {
   try {
     const { bookingId, phoneNumber } = req.body;
 
-    // Find booking
+    // Find the booking
     const booking = await Booking.findById(bookingId)
       .populate('client', 'name phone')
       .populate('massager', 'name');
 
     if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
     }
 
-    // Check if user owns this booking
-    if (booking.client._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Access denied' });
+    // Check if user is authorized to pay for this booking
+    if (booking.client._id.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to pay for this booking'
+      });
     }
 
     // Check if booking is already paid
     if (booking.paymentStatus === 'paid') {
-      return res.status(400).json({ message: 'Booking is already paid' });
+      return res.status(400).json({
+        success: false,
+        message: 'Booking is already paid'
+      });
     }
 
-    // Generate transaction ID
-    const transactionId = `DIMPLE_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Initiate payment with Telebirr
-    const paymentResult = await telebirr.initiatePayment(
-      booking.totalAmount,
-      phoneNumber,
-      transactionId,
-      `Payment for massage session with ${booking.massager.name}`
-    );
+    // In a real implementation, this would call the Telebirr API
+    // For demo purposes, we'll simulate the payment initiation
+    const transactionId = 'TXN_' + Math.random().toString(36).substr(2, 9).toUpperCase();
+    const paymentUrl = `https://telebirr.com/pay/${transactionId}`;
 
     // Create payment record
     const payment = await Payment.create({
       booking: bookingId,
-      client: req.user._id,
+      client: req.user.id,
       amount: booking.totalAmount,
-      transactionId,
-      telebirrResponse: paymentResult
+      paymentMethod: 'telebirr',
+      transactionId: transactionId,
+      telebirrResponse: {
+        paymentUrl,
+        transactionId
+      }
     });
 
-    // Update booking payment status
-    booking.paymentStatus = 'pending';
-    await booking.save();
-
-    res.json({
-      paymentId: payment._id,
-      transactionId,
-      paymentResult
+    res.status(200).json({
+      success: true,
+      data: {
+        paymentId: payment._id,
+        paymentUrl,
+        transactionId
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// Check payment status
-const checkPaymentStatus = async (req, res) => {
-  try {
-    const { transactionId } = req.params;
-
-    // Find payment
-    const payment = await Payment.findOne({ transactionId })
-      .populate('booking')
-      .populate('client');
-
-    if (!payment) {
-      return res.status(404).json({ message: 'Payment not found' });
-    }
-
-    // Check if user owns this payment
-    if (payment.client._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Check payment status with Telebirr
-    const statusResult = await telebirr.checkPaymentStatus(transactionId);
-
-    // Update payment status
-    payment.status = statusResult.status;
-    payment.telebirrResponse = { ...payment.telebirrResponse, statusCheck: statusResult };
-    await payment.save();
-
-    // Update booking payment status if payment is successful
-    if (statusResult.status === 'success') {
-      const booking = await Booking.findById(payment.booking._id);
-      booking.paymentStatus = 'paid';
-      await booking.save();
-    }
-
-    res.json({
-      paymentStatus: payment.status,
-      bookingStatus: payment.booking.status,
-      statusResult
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Payment callback (for Telebirr webhook)
-const paymentCallback = async (req, res) => {
+// @desc    Verify Telebirr payment
+// @route   POST /api/payments/telebirr/verify
+// @access  Public
+exports.verifyTelebirrPayment = async (req, res, next) => {
   try {
     const { transactionId, status } = req.body;
 
@@ -114,29 +80,71 @@ const paymentCallback = async (req, res) => {
       .populate('booking');
 
     if (!payment) {
-      return res.status(404).json({ message: 'Payment not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
     }
 
-    // Update payment status
-    payment.status = status;
-    payment.telebirrResponse = { ...payment.telebirrResponse, callback: req.body };
-    await payment.save();
-
-    // Update booking payment status if payment is successful
+    // In a real implementation, this would verify with Telebirr API
+    // For demo purposes, we'll simulate verification
     if (status === 'success') {
-      const booking = await Booking.findById(payment.booking._id);
-      booking.paymentStatus = 'paid';
-      await booking.save();
+      // Update payment status
+      payment.status = 'completed';
+      payment.telebirrResponse.verification = { status: 'success' };
+      await payment.save();
+
+      // Update booking payment status
+      payment.booking.paymentStatus = 'paid';
+      payment.booking.status = 'confirmed';
+      await payment.booking.save();
+
+      console.log(`Payment confirmed for booking ${payment.booking._id}`);
+    } else {
+      payment.status = 'failed';
+      await payment.save();
+
+      console.log(`Payment failed for booking ${payment.booking._id}`);
     }
 
-    res.json({ message: 'Callback processed successfully' });
+    res.status(200).json({
+      success: true,
+      message: 'Payment verification processed'
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-module.exports = {
-  initiatePayment,
-  checkPaymentStatus,
-  paymentCallback
+// @desc    Get payment details
+// @route   GET /api/payments/:id
+// @access  Private
+exports.getPayment = async (req, res, next) => {
+  try {
+    const payment = await Payment.findById(req.params.id)
+      .populate('booking')
+      .populate('client', 'name phone');
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
+    }
+
+    // Check if user is authorized to view this payment
+    if (req.user.role !== 'admin' && payment.client._id.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view this payment'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: payment
+    });
+  } catch (error) {
+    next(error);
+  }
 };
