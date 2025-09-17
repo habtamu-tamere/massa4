@@ -1,6 +1,6 @@
 <script>
   // API base URL - change this to your server URL in production
-  const API_BASE_URL = window.location.hostname === 'localhost' 
+  const API_BASE_URL = window.location.hostname === 'http://massa4.onrender.com' 
     ? 'http://massa4.onrender.com/api' 
     : '/api';
 
