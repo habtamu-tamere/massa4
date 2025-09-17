@@ -1,82 +1,122 @@
 const Rating = require('../models/Rating');
 const Booking = require('../models/Booking');
+const User = require('../models/User');
 
-// Create rating
-const createRating = async (req, res) => {
+// @desc    Get ratings for a massager
+// @route   GET /api/ratings/massager/:id
+// @access  Public
+exports.getMassagerRatings = async (req, res, next) => {
   try {
-    const { booking, rating, review } = req.body;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const startIndex = (page - 1) * limit;
 
-    // Check if booking exists
-    const bookingDoc = await Booking.findById(booking)
-      .populate('client')
-      .populate('massager');
+    const ratings = await Rating.find({ 
+      massager: req.params.id, 
+      isActive: true 
+    })
+      .populate('client', 'name')
+      .sort({ createdAt: -1 })
+      .skip(startIndex)
+      .limit(limit);
 
-    if (!bookingDoc) {
-      return res.status(404).json({ message: 'Booking not found' });
+    const total = await Rating.countDocuments({ 
+      massager: req.params.id, 
+      isActive: true 
+    });
+
+    res.status(200).json({
+      success: true,
+      count: ratings.length,
+      total,
+      data: ratings
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create rating
+// @route   POST /api/ratings
+// @access  Private
+exports.createRating = async (req, res, next) => {
+  try {
+    // Check if booking exists and is completed
+    const booking = await Booking.findById(req.body.booking);
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
     }
 
-    // Check if user owns this booking
-    if (bookingDoc.client._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Access denied' });
+    // Check if user is authorized to rate this booking
+    if (booking.client.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to rate this booking'
+      });
     }
 
     // Check if booking is completed
-    if (bookingDoc.status !== 'completed') {
-      return res.status(400).json({ message: 'Can only rate completed bookings' });
+    if (booking.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'You can only rate completed bookings'
+      });
     }
 
     // Check if rating already exists for this booking
-    const existingRating = await Rating.findOne({ booking });
+    const existingRating = await Rating.findOne({ booking: req.body.booking });
+
     if (existingRating) {
-      return res.status(400).json({ message: 'Rating already exists for this booking' });
+      return res.status(400).json({
+        success: false,
+        message: 'You have already rated this booking'
+      });
     }
 
     // Create rating
-    const newRating = await Rating.create({
-      booking,
-      client: req.user._id,
-      massager: bookingDoc.massager._id,
-      rating,
-      review
+    const rating = await Rating.create({
+      ...req.body,
+      client: req.user.id,
+      massager: booking.massager
     });
 
-    res.status(201).json(newRating);
+    // Update massager's average rating
+    await updateMassagerRating(booking.massager);
+
+    // Populate the rating with client details
+    await rating.populate('client', 'name');
+
+    res.status(201).json({
+      success: true,
+      data: rating
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// Get ratings for a massager
-const getMassagerRatings = async (req, res) => {
-  try {
-    const { massagerId } = req.params;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    const ratings = await Rating.find({ massager: massagerId })
-      .populate('client', 'name')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Rating.countDocuments({ massager: massagerId });
-
-    res.json({
-      data: ratings,
-      pagination: {
-        total,
-        page,
-        pages: Math.ceil(total / limit),
-        limit
-      }
+// Helper function to update massager's average rating
+const updateMassagerRating = async (massagerId) => {
+  const ratings = await Rating.find({ 
+    massager: massagerId, 
+    isActive: true 
+  });
+  
+  if (ratings.length > 0) {
+    const average = ratings.reduce((sum, rating) => sum + rating.rating, 0) / ratings.length;
+    
+    await User.findByIdAndUpdate(massagerId, {
+      'rating.average': average,
+      'rating.count': ratings.length
     });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } else {
+    await User.findByIdAndUpdate(massagerId, {
+      'rating.average': 0,
+      'rating.count': 0
+    });
   }
-};
-
-module.exports = {
-  createRating,
-  getMassagerRatings
 };
